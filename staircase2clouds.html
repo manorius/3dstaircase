@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>three.js webgl - geometry hierarchy 2</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <link type="text/css" rel="stylesheet" href="./assets/css/main.css">
+</head>
+
+<body>
+    <video id="video" loop crossOrigin="anonymous" playsinline style="display:none" muted="muted" autoplay>
+        <source src="./assets/images/Big_Buck_Bunny_small.ogv4" >
+    </video>
+
+    <script type="module">
+
+        import * as THREE from './build/three.module.js';
+        import { GUI } from './assets/js/dat.gui.module.js';
+        import Stats from './assets/js/stats.module.js';
+        import { RGBELoader } from './assets/js/RGBELoader.js';
+
+        let camera, scene, renderer, stats, root, cameraLoc, cloudLoc,videoLoc, cloudSprite, screen, video;
+
+        let mouseX = 0, mouseY = 0;
+
+        let windowHalfX = window.innerWidth / 2;
+        let windowHalfY = window.innerHeight / 2;
+        let gui;
+
+        let mapC;
+
+        init();
+        animate();
+
+        function init() {
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 15000);
+            camera.position.z = 500;
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xa4c0d1);
+
+            const geometry = new THREE.BoxBufferGeometry(400, 200, 50);
+            const material = new THREE.MeshStandardMaterial({ color: 0xffffff });
+            const axesHelper = new THREE.AxesHelper(500);
+
+
+
+            // environment: hdri map 
+
+            new RGBELoader()
+                .setDataType(THREE.UnsignedByteType)
+                .setPath('./assets/images/')
+                .load('royal_esplanade_1k.hdr', function (texture) {
+
+                    //texture.rotation = 90 * Math.PI / 180
+                    const envMap = pmremGenerator.fromEquirectangular(texture).texture;
+
+                    //scene.background = envMap;
+                    scene.environment = envMap;
+
+                    texture.dispose();
+                    pmremGenerator.dispose();
+                })
+
+            // end of env setup
+
+            // staircase
+            root = new THREE.Mesh(geometry, material);
+            root.position.x = 1000;
+            scene.add(root);
+
+            scene.add(axesHelper);
+            const amount = 200;
+            let object, parent = root;
+
+            for (let i = 0; i < amount; i++) {
+
+                object = new THREE.Mesh(geometry, material);
+                object.position.y = 100;
+
+                parent.add(object);
+                parent = object;
+
+            }
+
+            parent = root;
+            // END OF STAIRCASE
+
+            // VIDEO SCREEN
+            video = document.getElementById( 'video' );
+				video.play();
+
+                const videoTexture = new THREE.VideoTexture( video );
+                
+            const screenGeometry = new THREE.PlaneBufferGeometry(600, 400);
+            const screenMaterial = new THREE.MeshBasicMaterial( {map: videoTexture} );
+            screen = new THREE.Mesh(screenGeometry, screenMaterial);
+            screen.rotation.x = 90 * Math.PI / 180
+            scene.add(screen);
+            // END OF VIDEO SCREEN
+
+
+            // CLOUDS
+
+
+            const textureLoader = new THREE.TextureLoader();
+            const cloudMap = textureLoader.load("./assets/images/cloud10.png");
+
+            const cloudMaterial = new THREE.SpriteMaterial({ map: cloudMap });
+
+            cloudSprite = new THREE.Sprite(cloudMaterial);
+            cloudSprite.scale.set(800, 800, 800);
+
+
+            scene.add(cloudSprite);
+
+            // END OF CLOUD
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1;
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            document.body.appendChild(renderer.domElement);
+
+            const pmremGenerator = new THREE.PMREMGenerator(renderer);
+            pmremGenerator.compileEquirectangularShader();
+            //
+
+            stats = new Stats();
+            document.body.appendChild(stats.dom);
+
+            //
+
+            document.addEventListener('mousemove', onDocumentMouseMove, false);
+
+            document.addEventListener('wheel', (event) => {
+                camera.position.z += event.deltaY / .5;
+            });
+
+            //
+
+            window.addEventListener('resize', onWindowResize, false);
+
+            const gui = new GUI();
+
+            cameraLoc = { value: 0, mouseValue: 0 };
+            cloudLoc = { x: 911, y: 98, z: 3946, scale: 968 };
+            videoLoc = { x: 1019, y: 152, z: 4650, scale: 2.5, rotate:347 };
+
+            gui.add(cameraLoc, 'value').listen();
+            gui.add(cameraLoc, 'mouseValue').listen();
+            // positioning clouds
+            gui.add(cloudLoc, 'x', 0, 5000)
+            gui.add(cloudLoc, 'y', 0, 5000)
+            gui.add(cloudLoc, 'z', 0, 5000)
+            gui.add(cloudLoc, 'scale', 500, 2000)
+
+            gui.add(videoLoc, 'x', 0, 5000)
+            gui.add(videoLoc, 'y', 0, 5000)
+            gui.add(videoLoc, 'z', 0, 5000)
+            gui.add(videoLoc, 'scale', 1, 10)
+            gui.add(videoLoc, 'rotate', 0, 360)
+
+        }
+
+        function onWindowResize() {
+
+            windowHalfX = window.innerWidth / 2;
+            windowHalfY = window.innerHeight / 2;
+
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+
+            renderer.setSize(window.innerWidth, window.innerHeight);
+
+        }
+
+        function onDocumentMouseMove(event) {
+
+            mouseX = (event.clientX - windowHalfX) * .1;
+            mouseY = (-event.clientY + window.innerHeight - windowHalfY) * 20;
+        }
+
+        //
+
+        function animate() {
+
+            requestAnimationFrame(animate);
+
+            render();
+            stats.update();
+
+        }
+
+        function render() {
+
+            const time = Date.now() * 0.001 + 10000;
+
+            const rx = Math.sin(1 * 0.7) * 0.2;
+            const ry = Math.sin(1 * 0.3) * 0.1;
+            const rz = Math.sin(1) * 0.1;
+
+            //camera.position.x += ( mouseX - camera.position.x ) * 0.05;
+            camera.position.y = -3000;
+            camera.rotation.x = 90 * Math.PI / 180
+            //camera.position.z += ( - mouseY - camera.position.z ) * 0.1;
+            camera.position.x += (mouseX - camera.position.x) * 0.1;
+            //camera.lookAt( scene.position );
+
+            root.traverse(function (object) {
+
+                //object.rotation.x = rx;
+                //object.rotation.y = ry;
+                object.rotation.z = rz;
+                object.position.z = 50;
+
+            });
+            cameraLoc.value = camera.position.z;
+            cameraLoc.mouseValue = mouseY;
+
+            // POSITIONING CLOUD
+            cloudSprite.position.set(cloudLoc.x, cloudLoc.y, cloudLoc.z)
+            cloudSprite.scale.set(cloudLoc.scale, cloudLoc.scale, cloudLoc.scale)
+            cloudSprite.material.rotation += .05 * Math.PI / 180
+
+            // POSITIONING SCREEN
+            screen.position.set(videoLoc.x,videoLoc.y,videoLoc.z);
+            screen.scale.set(videoLoc.scale,videoLoc.scale,videoLoc.scale)
+            screen.rotation.y = videoLoc.rotate * Math.PI / 180
+            
+            renderer.render(scene, camera);
+
+        }
+
+    </script>
+
+</body>
+
+</html>
